@@ -1,0 +1,580 @@
+<!-- extends "layout.html" means: "layout.html" is a parent file -->
+{% extends "layout.html" %}
+{% block content %}
+
+<div class="container-fluid mt-4" style="max-width: 1200px;">
+    <!-- Chat Interface -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card chat-interface">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="bi bi-chat-dots me-2"></i>Chat Interface
+                    </h5>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-secondary" onclick="copyLastResponse()" title="Copy Last Response">
+                            <i class="bi bi-clipboard"></i>
+                        </button>
+                        <button class="btn btn-outline-secondary" onclick="downloadChat()" title="Download Chat">
+                            <i class="bi bi-download"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="chat-history" id="chatHistory">
+                        <!-- Initial welcome message -->
+                        <div class="chat-message ai-response">
+                            <i class="bi bi-robot me-2"></i>
+                            <strong>Professional AI Assistant</strong>
+                            <br><br>
+                            Select your service mode and start chatting or upload files for analysis.
+                            <br><br>
+                            <strong>8 specialized modes available:</strong> Data Science, Web Development, Automation, Business Intelligence, Technical Writing, Data Visualization, API Development, and General.
+                        </div>
+                        
+                        <!-- Chat messages will be populated here -->
+                        {% for response in chat_responses %}
+                            <div class="{{ 'chat-message user-input' if loop.index0 is even else 'chat-message ai-response' }}">
+                                {{ response }}
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Assistant Mode and File Analysis - Full width edge positioning -->
+<div class="container-fluid px-0 mb-4">
+    <div class="row mx-0">
+        <!-- Assistant Mode - Extreme Left -->
+        <div class="edge-positioned assistant-mode-fixed">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-toggles me-2"></i>Assistant Mode</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mode-selector" id="modeSelector">
+                        <button class="btn btn-outline-primary active" data-mode="general">
+                            <i class="bi bi-chat-square me-1"></i>General
+                        </button>
+                        <button class="btn btn-outline-info" data-mode="data_science">
+                            <i class="bi bi-graph-up me-1"></i>Data Science & Analytics
+                        </button>
+                        <button class="btn btn-outline-success" data-mode="web_development">
+                            <i class="bi bi-code-slash me-1"></i>Web Development
+                        </button>
+                        <button class="btn btn-outline-purple" data-mode="automation">
+                            <i class="bi bi-gear me-1"></i>Automation & Scripting
+                        </button>
+                        <button class="btn btn-outline-danger" data-mode="business_intelligence">
+                            <i class="bi bi-bar-chart me-1"></i>Business Intelligence
+                        </button>
+                        <button class="btn btn-outline-secondary" data-mode="technical_writing">
+                            <i class="bi bi-file-text me-1"></i>Technical Writing
+                        </button>
+                        <button class="btn btn-outline-dark" data-mode="data_visualization">
+                            <i class="bi bi-pie-chart me-1"></i>Data Visualization
+                        </button>
+                        <button class="btn btn-outline-primary" data-mode="api_development">
+                            <i class="bi bi-cloud me-1"></i>API Development
+                        </button>
+                    </div>
+                    <small class="text-muted" id="modeDescription">
+                        General purpose assistant for various tasks
+                    </small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Empty space in middle -->
+        <div class="col-md-6 col-lg-8"></div>
+
+        <!-- File Analysis - Extreme Right -->
+        <div class="edge-positioned file-analysis-fixed">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-cloud-upload me-2"></i>File Analysis</h6>
+                </div>
+                <div class="card-body">
+                    <div class="file-upload-area" id="fileUploadArea">
+                        <i class="bi bi-cloud-upload display-4 text-muted mb-3"></i>
+                        <p class="mb-2">Drag & drop files here or click to browse</p>
+                        <p class="text-muted small">Supports: CSV, Excel, JSON, TXT (Max 10MB)</p>
+                        <input type="file" id="fileInput" class="d-none" accept=".csv,.xlsx,.json,.txt">
+                    </div>
+                    <div id="fileAnalysis" class="mt-3" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Input Footer -->
+<div class="container" id="footer">
+    <div class="input-group">
+        <input class="form-control" 
+               placeholder="Ask about research, freelancing, or upload data for analysis..." 
+               id="userInput"
+               maxlength="2000">
+        <button class="btn btn-primary" type="button" id="sendButton" disabled>
+            <i class="bi bi-send"></i>
+        </button>
+    </div>
+    <div class="text-center mt-2">
+        <small class="text-muted">
+            <kbd>Enter</kbd> to send • <kbd>Shift+Enter</kbd> for new line • <kbd>Ctrl+K</kbd> to clear
+        </small>
+    </div>
+</div>
+
+<script>
+// Enhanced chat functionality
+class EnhancedChat {
+    constructor() {
+        this.sessionId = localStorage.getItem('chatSessionId') || this.generateSessionId();
+        localStorage.setItem('chatSessionId', this.sessionId);
+        
+        this.currentMode = 'general';
+        this.websocket = null;
+        this.isConnected = false;
+        
+        this.initializeElements();
+        this.initializeWebSocket();
+        this.initializeEventListeners();
+        this.initializeFileUpload();
+        this.initializeKeyboardShortcuts();
+    }
+    
+    generateSessionId() {
+        return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    }
+    
+    initializeElements() {
+        this.chatHistory = document.getElementById('chatHistory');
+        this.userInput = document.getElementById('userInput');
+        this.sendButton = document.getElementById('sendButton');
+        this.typingIndicator = document.getElementById('typingIndicator');
+        this.modeSelector = document.getElementById('modeSelector');
+        this.fileUploadArea = document.getElementById('fileUploadArea');
+        this.fileInput = document.getElementById('fileInput');
+    }
+    
+    forceScroll() {
+        // Immediate scroll without animation
+        this.chatHistory.scrollTop = this.chatHistory.scrollHeight;
+    }
+
+    initializeWebSocket() {
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${wsProtocol}//${window.location.host}/ws/${this.sessionId}`;
+        
+        this.websocket = new WebSocket(wsUrl);
+        window.chatWebSocket = this.websocket;
+        
+        this.websocket.onopen = () => {
+            this.isConnected = true;
+            this.sendButton.disabled = false;
+            console.log('WebSocket connected');
+        };
+        
+        this.websocket.onmessage = (event) => {
+            this.handleWebSocketMessage(event);
+        };
+        
+        this.websocket.onclose = () => {
+            this.isConnected = false;
+            this.sendButton.disabled = true;
+            this.hideTypingIndicator();
+            console.log('WebSocket disconnected');
+        };
+        
+        this.websocket.onerror = (error) => {
+            console.error('WebSocket error:', error);
+            showToast('Connection error. Please refresh the page.', 'danger');
+        };
+    }
+    
+    handleWebSocketMessage(event) {
+        try {
+            const data = JSON.parse(event.data);
+            
+            switch(data.type) {
+                case 'chunk':
+                    this.appendToLastMessage(data.content);
+                    // Force scroll after each chunk
+                    requestAnimationFrame(() => this.scrollToBottom());
+                    break;
+                case 'complete':
+                    this.hideTypingIndicator();
+                    this.finalizeMessage();
+                    break;
+                case 'error':
+                    this.hideTypingIndicator();
+                    showToast(data.message, 'danger');
+                    break;
+            }
+        } catch (e) {
+            this.appendToLastMessage(event.data);
+            // Force scroll for backward compatibility
+            requestAnimationFrame(() => this.scrollToBottom());
+        }
+    }
+    
+    initializeEventListeners() {
+        // Send button click
+        this.sendButton.onclick = () => this.sendMessage();
+        
+        // Input field changes
+        this.userInput.addEventListener('input', () => {
+            this.sendButton.disabled = !this.userInput.value.trim() || !this.isConnected;
+        });
+        
+        // Mode selection
+        this.modeSelector.addEventListener('click', (e) => {
+            if (e.target.tagName === 'BUTTON') {
+                this.switchMode(e.target.dataset.mode);
+            }
+        });
+    }
+    
+    initializeFileUpload() {
+        // Click to upload
+        this.fileUploadArea.onclick = () => this.fileInput.click();
+        
+        // Drag and drop
+        this.fileUploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            this.fileUploadArea.classList.add('dragover');
+        });
+        
+        this.fileUploadArea.addEventListener('dragleave', () => {
+            this.fileUploadArea.classList.remove('dragover');
+        });
+        
+        this.fileUploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            this.fileUploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                this.handleFileUpload(files[0]);
+            }
+        });
+        
+        // File input change
+        this.fileInput.onchange = (e) => {
+            if (e.target.files.length > 0) {
+                this.handleFileUpload(e.target.files[0]);
+            }
+        };
+    }
+    
+    initializeKeyboardShortcuts() {
+        document.addEventListener('keydown', (e) => {
+            // Enter to send (if not shift+enter)
+            if (e.key === 'Enter' && !e.shiftKey && document.activeElement === this.userInput) {
+                e.preventDefault();
+                this.sendMessage();
+            }
+            
+            // Ctrl+K to clear chat
+            if (e.ctrlKey && e.key === 'k') {
+                e.preventDefault();
+                clearChat();
+            }
+        });
+    }
+    
+    switchMode(mode) {
+        this.currentMode = mode;
+        
+        // Update UI
+        this.modeSelector.querySelectorAll('.btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        this.modeSelector.querySelector(`[data-mode="${mode}"]`).classList.add('active');
+        
+        // Update mode description
+        const descriptions = {
+            'general': 'Professional technical assistant for various tasks',
+            'data_science': 'Machine learning, statistical analysis, and predictive modeling',
+            'web_development': 'Full-stack development, responsive design, and modern frameworks',
+            'automation': 'Process automation, web scraping, and workflow optimization',
+            'business_intelligence': 'Dashboards, KPI tracking, and data-driven insights',
+            'technical_writing': 'Documentation, API guides, and user manuals',
+            'data_visualization': 'Interactive charts, dashboards, and business presentations',
+            'api_development': 'REST APIs, integrations, and microservices'
+        };
+        document.getElementById('modeDescription').textContent = descriptions[mode];
+        
+        // Send mode change to backend
+        fetch('/api/chat/mode', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: `session_id=${this.sessionId}&mode=${mode}`
+        });
+        
+        showToast(`Switched to ${mode} mode`, 'success');
+    }
+    
+    async handleFileUpload(file) {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        try {
+            showToast('Analyzing file...', 'info');
+            
+            const response = await fetch('/upload', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                this.displayFileAnalysis(result);
+                showToast('File analyzed successfully!', 'success');
+            } else {
+                showToast('Failed to analyze file', 'danger');
+            }
+            
+        } catch (error) {
+            showToast('Error uploading file', 'danger');
+        }
+    }
+    
+    displayFileAnalysis(result) {
+        const analysisDiv = document.getElementById('fileAnalysis');
+        
+        let html = `
+            <div class="analysis-card">
+                <h6><i class="bi bi-file-text me-2"></i>${result.filename}</h6>
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Dataset Overview:</h6>
+                        <ul class="list-unstyled">
+                            <li><strong>Shape:</strong> ${result.analysis.shape[0]} rows × ${result.analysis.shape[1]} columns</li>
+                            <li><strong>Columns:</strong> ${result.analysis.columns.join(', ')}</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Data Quality:</h6>
+                        <ul class="list-unstyled">
+        `;
+        
+        for (const [col, missing] of Object.entries(result.analysis.missing_values)) {
+            if (missing > 0) {
+                html += `<li><strong>${col}:</strong> ${missing} missing values</li>`;
+            }
+        }
+        
+        html += `
+                        </ul>
+                    </div>
+                </div>
+        `;
+        
+        if (result.visualizations && result.visualizations.correlation) {
+            html += `
+                <div class="mt-3">
+                    <h6>Correlation Analysis:</h6>
+                    <img src="${result.visualizations.correlation}" class="img-fluid" style="max-width: 100%; height: auto;">
+                </div>
+            `;
+        }
+        
+        html += `</div>`;
+        
+        analysisDiv.innerHTML = html;
+        analysisDiv.style.display = 'block';
+        
+        // Auto-suggest analysis questions
+        const suggestions = [
+            "What are the key insights from this data?",
+            "Can you identify any patterns or correlations?",
+            "What preprocessing steps would you recommend?",
+            "How can I use this data for a freelancing project?"
+        ];
+        
+        this.addMessage(`File "${result.filename}" uploaded successfully! Here are some analysis suggestions:\n\n${suggestions.map((s, i) => `${i+1}. ${s}`).join('\n')}`, 'ai-response');
+    }
+    
+    sendMessage() {
+        const message = this.userInput.value.trim();
+        if (!message || !this.isConnected) return;
+        
+        // Add user message to UI
+        this.addMessage(message, 'user-input');
+        
+        // Clear input
+        this.userInput.value = '';
+        this.sendButton.disabled = true;
+        
+        // Show typing indicator
+        this.showTypingIndicator();
+        
+        // Send message with mode information
+        const messageData = {
+            message: message,
+            mode: this.currentMode,
+            timestamp: new Date().toISOString()
+        };
+        
+        this.websocket.send(JSON.stringify(messageData));
+    }
+    
+    addMessage(content, className) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `chat-message ${className}`;
+        
+        if (className === 'ai-response') {
+            content = this.processSpecialContent(content);
+        }
+        
+        messageDiv.innerHTML = content;
+        this.chatHistory.appendChild(messageDiv);
+        
+        // Re-render MathJax and highlight code first
+        if (window.MathJax && className === 'ai-response') {
+            MathJax.typesetPromise([messageDiv]).then(() => {
+                this.forceScroll(); // Scroll after MathJax rendering
+            });
+        } else {
+            this.forceScroll(); // Immediate scroll for non-MathJax content
+        }
+        
+        // Highlight code blocks
+        messageDiv.querySelectorAll('pre code').forEach(block => {
+            hljs.highlightElement(block);
+        });
+        
+        return messageDiv;
+    }
+    
+    processSpecialContent(content) {
+        // Convert LaTeX delimiters
+        content = content.replace(/\\\[(.*?)\\\]/gs, '<div class="math-display">$$$$1$$</div>');
+        content = content.replace(/\\\((.*?)\\\)/g, '$$$1$$');
+        
+        // Convert code blocks
+        content = content.replace(/```(\w+)?\n(.*?)```/gs, '<pre><code class="language-$1">$2</code></pre>');
+        
+        // Convert inline code
+        content = content.replace(/`([^`]+)`/g, '<code>$1</code>');
+        
+        // Convert line breaks
+        content = content.replace(/\n/g, '<br>');
+        
+        return content;
+    }
+    
+    appendToLastMessage(content) {
+        const lastMessage = this.chatHistory.querySelector('.chat-message:last-child');
+        if (lastMessage && lastMessage.classList.contains('ai-response')) {
+            lastMessage.innerHTML += content;
+            // Add immediate scroll after content update
+            this.scrollToBottom();
+        } else {
+            this.addMessage(content, 'ai-response');
+        }
+    }
+    
+    finalizeMessage() {
+        const lastMessage = this.chatHistory.querySelector('.chat-message:last-child');
+        if (lastMessage) {
+            // Process special content after complete message
+            lastMessage.innerHTML = this.processSpecialContent(lastMessage.innerHTML);
+            
+            // Re-render MathJax and syntax highlighting
+            if (window.MathJax) {
+                MathJax.typesetPromise([lastMessage]);
+            }
+            lastMessage.querySelectorAll('pre code').forEach(block => {
+                hljs.highlightElement(block);
+            });
+        }
+        this.sendButton.disabled = false;
+    }
+    
+    showTypingIndicator() {
+        // Remove any existing typing indicator
+        this.hideTypingIndicator();
+        
+        // Create typing indicator element
+        const typingDiv = document.createElement('div');
+        typingDiv.className = 'typing-indicator show';
+        typingDiv.id = 'typingIndicator';
+        typingDiv.innerHTML = `
+            <div class="typing-dots">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+            <small class="text-muted">AI is thinking...</small>
+        `;
+        
+        // Add to chat history (this makes it appear at the bottom)
+        this.chatHistory.appendChild(typingDiv);
+        this.forceScroll();
+    }
+
+    hideTypingIndicator() {
+        const existingIndicator = document.getElementById('typingIndicator');
+        if (existingIndicator) {
+            existingIndicator.remove();
+        }
+    }
+    
+    scrollToBottom() {
+        // Remove the setTimeout and use immediate scrolling
+        const chatHistory = this.chatHistory;
+        if (chatHistory) {
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+            // Force immediate scroll without smooth behavior for real-time messages
+        }
+    }
+}
+
+// Utility functions
+function copyLastResponse() {
+    const lastAiMessage = document.querySelector('.chat-message.ai-response:last-of-type');
+    if (lastAiMessage) {
+        const text = lastAiMessage.textContent;
+        navigator.clipboard.writeText(text).then(() => {
+            showToast('Response copied to clipboard!', 'success');
+        });
+    }
+}
+
+function downloadChat() {
+    const messages = Array.from(document.querySelectorAll('.chat-message')).map(msg => ({
+        type: msg.classList.contains('user-input') ? 'user' : 'assistant',
+        content: msg.textContent,
+        timestamp: new Date().toISOString()
+    }));
+    
+    const chatData = {
+        session_id: chat.sessionId,
+        mode: chat.currentMode,
+        messages: messages,
+        exported_at: new Date().toISOString()
+    };
+    
+    const blob = new Blob([JSON.stringify(chatData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `chat_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+// Initialize chat when page loads
+let chat;
+document.addEventListener('DOMContentLoaded', () => {
+    chat = new EnhancedChat();
+});
+</script>
+
+{% endblock %}
