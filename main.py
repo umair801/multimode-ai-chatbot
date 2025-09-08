@@ -1,3 +1,5 @@
+# Deployed, but didn't find the URL. Please https://railway.com/dashboard
+
 # Deploy this chatbot and upload chatbots (project2 and 4) to upw portfolio.
 # Uploaded file access is not working now. 
 
@@ -245,6 +247,14 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 # Add user input to chat log
                 chat_sessions[session_id].append({'role': 'user', 'content': user_input})
                 
+                # Check if OpenAI is available
+                if openapi is None:
+                    await websocket.send_text(json.dumps({
+                        'type': 'error',
+                        'message': 'OpenAI service is currently unavailable'
+                    }))
+                    continue
+
                 # Get OpenAI response
                 response = openapi.chat.completions.create(
                     model='chatgpt-4o-latest',
@@ -293,6 +303,14 @@ async def image_page(request: Request):
 @app.post('/image', response_class=HTMLResponse)
 async def create_image(request: Request, user_input: Annotated[str, Form()]):
     try:
+        # Check if OpenAI is available
+        if openapi is None:
+            return templates.TemplateResponse('image.html', {
+                'request': request,
+                'error': 'OpenAI service is currently unavailable',
+                'prompt': user_input
+            })
+
         # Simple image generation without unsupported parameters
         response = openapi.images.generate(
             prompt=user_input,
