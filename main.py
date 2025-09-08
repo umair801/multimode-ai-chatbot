@@ -3,7 +3,14 @@
 # Deploy this chatbot and upload chatbots (project2 and 4) to upw portfolio.
 # Uploaded file access is not working now. 
 
-from openai import OpenAI
+# At the top of main.py, replace the OpenAI import with:
+try:
+    from openai import OpenAI
+    OPENAI_AVAILABLE = True
+except ImportError:
+    print("OpenAI library not available")
+    OPENAI_AVAILABLE = False
+    OpenAI = None
 from fastapi import FastAPI, Form, Request, WebSocket, UploadFile, File, HTTPException
 from fastapi.staticfiles import StaticFiles
 from typing import Annotated, List
@@ -26,16 +33,15 @@ import uuid
 # Load environment variables
 load_dotenv()
 
-# Initialize OpenAI client with error handling
-try:
-    if os.getenv('OPENAI_API_KEY'):
+# Then in the initialization section:
+if OPENAI_AVAILABLE and os.getenv('OPENAI_API_KEY'):
+    try:
         openapi = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
         print("OpenAI client initialized successfully")
-    else:
-        print("WARNING: OPENAI_API_KEY not found")
+    except Exception as e:
+        print(f"OpenAI initialization error: {e}")
         openapi = None
-except Exception as e:
-    print(f"OpenAI initialization error: {e}")
+else:
     openapi = None
     
 # FastAPI app initialization
