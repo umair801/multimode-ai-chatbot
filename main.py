@@ -24,16 +24,13 @@ import uuid
 # Load environment variables
 load_dotenv()
 
-# Initialize OpenAI client with better error handling
+# Initialize OpenAI client with error handling
 try:
-    openapi = OpenAI(
-        api_key=os.getenv('OPENAI_API_KEY'),
-        timeout=30.0,
-        max_retries=3
-    )
-    
-    if not os.getenv('OPENAI_API_KEY'):
-        print("WARNING: OPENAI_API_KEY not found in environment variables!")
+    if os.getenv('OPENAI_API_KEY'):
+        openapi = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+        print("OpenAI client initialized successfully")
+    else:
+        print("WARNING: OPENAI_API_KEY not found")
         openapi = None
 except Exception as e:
     print(f"OpenAI initialization error: {e}")
